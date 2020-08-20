@@ -1,6 +1,5 @@
-﻿using System.IO;
-using System.Diagnostics;
-using System;
+﻿using System;
+using System.IO;
 using System.Reflection;
 
 namespace Copier
@@ -8,6 +7,7 @@ namespace Copier
     static class Logger
     {
         public static LoggingLevel Level { get; private set; }
+        public static string LogPath { get; private set; }
         private static StreamWriter logFile;
 
         public static void Init(string logDirPath, LoggingLevel lvl = LoggingLevel.Info)
@@ -22,7 +22,7 @@ namespace Copier
 
             if (lvl > LoggingLevel.None)
             {
-                var fileName = $"{Assembly.GetCallingAssembly().GetName().Name}_log_{DateTime.Now:yyyy-MM-dd}.txt";
+                var fileName = $"{Assembly.GetCallingAssembly().GetName().Name}_log_{DateTime.Now:yyyy-MM-dd}.log";
                 string path;
 
                 if (Config.ValidateDirectory(logDirPath, true) == null)
@@ -32,6 +32,7 @@ namespace Copier
 
                 logFile = File.AppendText(path);
                 logFile.AutoFlush = true;
+                LogPath = path;
             }
          
             Level = lvl;
@@ -89,7 +90,7 @@ namespace Copier
         public static void WriteLineToLog(string msg, LoggingLevel level)
         {
             var formedMsg = string.Format("[{0}][{1,-5}] {2}\n",
-                DateTime.Now.ToString("dd-MM-yy hh:mm:ss:ffff"),
+                DateTime.Now.ToString("dd-MM-yy HH:mm:ss:ffff"),
                 level,
                 msg);
             WriteRawToLog(formedMsg);

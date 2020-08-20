@@ -1,10 +1,10 @@
 ﻿using System;
-using System.IO;
-using System.Security;
 using System.Collections.Generic;
 using System.Diagnostics;
-using Newtonsoft.Json;
+using System.IO;
 using System.Linq;
+using System.Security;
+using Newtonsoft.Json;
 
 namespace Copier
 {
@@ -14,32 +14,15 @@ namespace Copier
         {
             Debug.Listeners.Add(new TextWriterTraceListener(Console.Out));
 
-            if (args.Length == 1)
-            {
-
-            }
-
             try
             {
-                var conf = new Config("conf.json");
-                var exceptions = conf.CleanData();
-                Logger.Init(conf.Data.LoggingDirectory, conf.Data.LoggingLevel);
-                Logger.WriteRawToLog($"Log started at {DateTime.Now:yyyy-MM-dd_hh-mm-ss-ffff}\nLogging level: {conf.Data.LoggingLevel}\n");
-
-                if (exceptions.ContainsKey(nameof(conf.Data.DestinationDirectory)))
-                    throw new SecurityException(nameof(conf.Data.DestinationDirectory));
-                
-                if (exceptions.ContainsKey(nameof(conf.Data.SourceDirectories)))
-                    foreach (var dir in exceptions[nameof(conf.Data.SourceDirectories)])
-                        Logger.Error($"Source directory {dir.Message}");
-
+                var conf = Init(args);
                 var toDir = new DirectoryInfo(conf.Data.DestinationDirectory);
                 var fromDirs = (from dir in conf.Data.SourceDirectories
                                 select new DirectoryInfo(dir))
                                 .ToList();
-
-                var failedDirs = Copier.MakeCopies(fromDirs, toDir, "' copy from 'yyyy-MM-dd_hh-mm-ss");
-                EndLog(fromDirs, failedDirs);
+                var dirsStats = Copier.MakeCopies(fromDirs, toDir, "' copy from 'yyyy-MM-dd_HH-mm-ss");
+                EndLog(fromDirs, dirsStats);
             }
             catch (FileNotFoundException)
             {
@@ -52,37 +35,84 @@ namespace Copier
                 Logger.Fatal(msg);
                 Console.WriteLine(msg);
             }
-            catch (SecurityException)
+            catch (SecurityException e)
             {
-                var msg = "Destination directory is inaccessible";
+                if (e.Message != nameof(Config.Data.DestinationDirectory)) throw e;
+
+                var msg = "Destination directory is invalid";
                 Logger.Fatal(msg);
                 Console.WriteLine(msg);
             }
+            catch (UnauthorizedAccessException) { Console.WriteLine("[Fatal] Cannot create log file, try different directory"); }
             catch (Exception e) { Logger.Log(e, e.ToString(), LoggingLevel.Fatal); }
 
-
-#if DEBUG
+            #if DEBUG
             Console.WindowWidth = 200;
             Console.WindowHeight = 40;
             Debug.WriteLine($"\nPress any key to exit\n{Environment.CommandLine}");
             Console.SetWindowPosition(0, 0);
             Console.ReadKey();
-#endif
+            #endif
         }
 
-        public static void EndLog(List<DirectoryInfo> fromDirs, Dictionary<string, int> failedDirs)
+        public static Config Init(string[] args)
         {
-            Logger.WriteRawToLog(new string('-', 50)+'\n');
+            var pathToConf = "conf.json";
 
-            foreach (var dir in fromDirs)
+            if (args.Length > 0)
             {
-                string dirName = dir.FullName;
-                int total = Directory.GetFiles(dirName, "*", SearchOption.AllDirectories).Length;
-                int failed = failedDirs.TryGetValue(dirName, out int failCount) ? failCount : 0;
-                Logger.WriteRawToLog($"'{dir.FullName}': failed - {failed}, copied - {total - failed} files\n");
+                if (args.Length == 1)
+                    pathToConf = args[0];
+                else
+                {
+                    Console.WriteLine("Usage: [pathToConfigFile]");
+                    Environment.Exit(1);
+                }
             }
 
-            Logger.WriteRawToLog($"Log ended at {DateTime.Now:yyyy-MM-dd_hh-mm-ss-ffff}\n\n");
+            var conf = new Config(pathToConf);
+            var exceptions = conf.CleanData();
+
+            if (exceptions.ContainsKey(nameof(conf.Data.DestinationDirectory)))
+                throw new SecurityException(nameof(conf.Data.DestinationDirectory));
+
+            if (exceptions.ContainsKey(nameof(conf.Data.LoggingDirectory)))
+            {
+                var eType = exceptions[nameof(conf.Data.LoggingDirectory)].GetType();
+
+                if (eType == typeof(UnauthorizedAccessException))
+                    Console.WriteLine("Logging directory is inaccessible");
+                else if (eType == typeof(DirectoryNotFoundException))
+                    Console.WriteLine("Logging directory does not exist");
+                var path = Directory.GetCurrentDirectory();
+                Console.WriteLine($"Log file will be created in current directory - '{path}'");
+                conf.Data.LoggingDirectory = path;
+            }
+
+            Debug.WriteLine($"Config:\n{JsonConvert.SerializeObject(conf.Data, Formatting.Indented)}\n");
+            Logger.Init(conf.Data.LoggingDirectory, conf.Data.LoggingLevel);
+            Logger.WriteRawToLog($"Log started at {DateTime.Now:yyyy-MM-dd_HH-mm-ss-ffff}\nLogging level: {conf.Data.LoggingLevel}\n");
+            Logger.WriteRawToLog($"Destination directory: {conf.Data.DestinationDirectory}\n");
+
+            if (exceptions.ContainsKey(nameof(conf.Data.SourceDirectories)))
+                foreach (var dir in exceptions[nameof(conf.Data.SourceDirectories)])
+                    Logger.Error($"Source directory {dir.Message}");
+
+            return conf;
+        }
+
+        public static void EndLog(List<DirectoryInfo> fromDirs, Dictionary<string, (int success, int fail)> dirsStats)
+        {
+            Logger.WriteRawToLog(new string('-', 50) + '\n');
+
+            foreach (var dir in fromDirs)
+                if (dirsStats.ContainsKey(dir.FullName))
+                {
+                    (int success, int fail) = dirsStats[dir.FullName];
+                    Logger.WriteRawToLog($"'{dir.FullName}': failed - {fail}, copied - {success} files\n");
+                }
+
+            Logger.WriteRawToLog($"Log ended at {DateTime.Now:yyyy-MM-dd_HH-mm-ss-ffff}\n\n");
         }
     }
 }

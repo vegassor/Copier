@@ -1,11 +1,11 @@
-﻿using Copier.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using System.Linq;
+using Copier.Json;
 
 namespace Copier
 {
@@ -13,15 +13,12 @@ namespace Copier
     {
         internal class ConfigData
         {
-
             [JsonConverter(typeof(StringEnumConverter))]
             public LoggingLevel LoggingLevel { get; set; }
 
             [JsonConverter(typeof(SingleToListConverter<string>))]
             public List<string> SourceDirectories { get; set; }
             
-            public bool? SkipInvalidDirectories { get; set; }
-
             public string DestinationDirectory { get; set; }
 
             public string LoggingDirectory { get; set; }
@@ -73,12 +70,12 @@ namespace Copier
         {
             var exceptions = new Dictionary<string, List<Exception>>(4);
 
-            //validate destination directory for existence and accessibility
+            //destination directory
             var destEx = ValidateDirectory(Data.DestinationDirectory, true);
             if (destEx != null) 
                 exceptions[nameof(Data.DestinationDirectory)] = new List<Exception> { destEx };
 
-            //validate logging directory for existence and accessibility
+            //directory
             var logEx = ValidateDirectory(Data.LoggingDirectory, true);
             if (logEx != null)
             {
@@ -86,7 +83,7 @@ namespace Copier
                 Data.LoggingDirectory = "";
             }
 
-            //validate source directories
+            //source directories - remove invalid
             var sourceEx = new List<Exception>();
             var sourceDirs = Data.SourceDirectories.Distinct().ToList();
             
@@ -115,8 +112,9 @@ namespace Copier
             {
                 try
                 {
-                    Directory.GetAccessControl(path)
-                        .GetAccessRules(true, true, typeof(System.Security.Principal.NTAccount));
+                    var security = Directory.GetAccessControl(path);
+                    var acl = security.GetAccessRules(true, true,
+                        typeof(System.Security.Principal.NTAccount));
                     Directory.GetFiles(path);
 
                     if (canWrite)
