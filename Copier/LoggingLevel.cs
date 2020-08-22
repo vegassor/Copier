@@ -1,6 +1,6 @@
 ﻿namespace Copier
 {
-    enum LoggingLevel
+    public enum LoggingLevel
     {
         //don't log
         None = 0,

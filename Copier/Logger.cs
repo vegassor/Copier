@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.IO.Abstractions;
 using System.Reflection;
 
 namespace Copier
@@ -10,7 +11,11 @@ namespace Copier
         public static string LogPath { get; private set; }
         private static StreamWriter logFile;
 
-        public static void Init(string logDirPath, LoggingLevel lvl = LoggingLevel.Info)
+        /// <summary>
+        /// Initializes Logger - opens a file for writing, sets LoggingLevel
+        /// </summary>
+        /// <param name="logDirPath">Path to log file</param>
+        public static void Init(string logDirPath, IFileSystem fileSystem, LoggingLevel lvl = LoggingLevel.Info)
         {
             if (logFile != null)
             {
@@ -25,7 +30,7 @@ namespace Copier
                 var fileName = $"{Assembly.GetCallingAssembly().GetName().Name}_log_{DateTime.Now:yyyy-MM-dd}.log";
                 string path;
 
-                if (Config.ValidateDirectory(logDirPath, true) == null)
+                if (Config.ValidateDirectory(logDirPath, true, fileSystem) == null)
                     path = Path.Combine(logDirPath, fileName);
                 else
                     path = Path.Combine(Directory.GetCurrentDirectory(), fileName);

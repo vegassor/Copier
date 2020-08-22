@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Abstractions;
 using System.Linq;
 using System.Security;
 using Newtonsoft.Json;
@@ -16,12 +17,16 @@ namespace Copier
 
             try
             {
-                var conf = Init(args);
-                var toDir = new DirectoryInfo(conf.Data.DestinationDirectory);
+                var fileSystem = new FileSystem();
+                var conf = Init(args, fileSystem);
+                var toDir = fileSystem.DirectoryInfo.FromDirectoryName(conf.Data.DestinationDirectory);
                 var fromDirs = (from dir in conf.Data.SourceDirectories
-                                select new DirectoryInfo(dir))
+                                select fileSystem.DirectoryInfo.FromDirectoryName(dir))
                                 .ToList();
-                var dirsStats = Copier.MakeCopies(fromDirs, toDir, "' copy from 'yyyy-MM-dd_HH-mm-ss");
+                var dirsStats = Copier.MakeCopies(fromDirs,
+                    toDir,
+                    "' copy from 'yyyy-MM-dd_HH-mm-ss",
+                    fileSystem);
                 EndLog(fromDirs, dirsStats);
             }
             catch (FileNotFoundException)
@@ -45,17 +50,21 @@ namespace Copier
             }
             catch (UnauthorizedAccessException) { Console.WriteLine("[Fatal] Cannot create log file, try different directory"); }
             catch (Exception e) { Logger.Log(e, e.ToString(), LoggingLevel.Fatal); }
+            finally
+            {
+                Logger.WriteRawToLog($"Log ended at {DateTime.Now:yyyy-MM-dd_HH-mm-ss-ffff}\n\n");
 
-            #if DEBUG
-            Console.WindowWidth = 200;
-            Console.WindowHeight = 40;
-            Debug.WriteLine($"\nPress any key to exit\n{Environment.CommandLine}");
-            Console.SetWindowPosition(0, 0);
-            Console.ReadKey();
-            #endif
+                #if DEBUG
+                Console.WindowWidth = 200;
+                Console.WindowHeight = 40;
+                Debug.WriteLine($"\nPress any key to exit\n{Environment.CommandLine}");
+                Console.SetWindowPosition(0, 0);
+                Console.ReadKey();
+                #endif
+            }
         }
 
-        public static Config Init(string[] args)
+        public static Config Init(string[] args, IFileSystem fileSystem)
         {
             var pathToConf = "conf.json";
 
@@ -70,7 +79,7 @@ namespace Copier
                 }
             }
 
-            var conf = new Config(pathToConf);
+            var conf = new Config(pathToConf, fileSystem);
             var exceptions = conf.CleanData();
 
             if (exceptions.ContainsKey(nameof(conf.Data.DestinationDirectory)))
@@ -89,8 +98,8 @@ namespace Copier
                 conf.Data.LoggingDirectory = path;
             }
 
-            Debug.WriteLine($"Config:\n{JsonConvert.SerializeObject(conf.Data, Formatting.Indented)}\n");
-            Logger.Init(conf.Data.LoggingDirectory, conf.Data.LoggingLevel);
+            Debug.WriteLine($"Cleaned config:\n{JsonConvert.SerializeObject(conf.Data, Formatting.Indented)}\n");
+            Logger.Init(conf.Data.LoggingDirectory, fileSystem, conf.Data.LoggingLevel);
             Logger.WriteRawToLog($"Log started at {DateTime.Now:yyyy-MM-dd_HH-mm-ss-ffff}\nLogging level: {conf.Data.LoggingLevel}\n");
             Logger.WriteRawToLog($"Destination directory: {conf.Data.DestinationDirectory}\n");
 
@@ -101,7 +110,7 @@ namespace Copier
             return conf;
         }
 
-        public static void EndLog(List<DirectoryInfo> fromDirs, Dictionary<string, (int success, int fail)> dirsStats)
+        public static void EndLog(List<IDirectoryInfo> fromDirs, Dictionary<string, (int success, int fail)> dirsStats)
         {
             Logger.WriteRawToLog(new string('-', 50) + '\n');
 
@@ -112,7 +121,6 @@ namespace Copier
                     Logger.WriteRawToLog($"'{dir.FullName}': failed - {fail}, copied - {success} files\n");
                 }
 
-            Logger.WriteRawToLog($"Log ended at {DateTime.Now:yyyy-MM-dd_HH-mm-ss-ffff}\n\n");
         }
     }
 }

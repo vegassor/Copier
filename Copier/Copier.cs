@@ -2,12 +2,28 @@
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using System.IO.Abstractions;
+using System.Linq;
 
 namespace Copier
 {
-    class Copier
+    public class Copier
     {
-        public static Dictionary<string, (int success, int fail)> MakeCopies(List<DirectoryInfo> sourceDirs, DirectoryInfo destDir, string timeFormat)
+        /// <summary>
+        /// Copies all directories from 'sourceDirs' into 'destDir' and gives them names with time stamps
+        /// </summary>
+        /// <param name="sourceDirs">List of directories to be copied</param>
+        /// <param name="destDir">Directory in which new directories will be created</param>
+        /// <param name="timeFormat">String used to create time stamp</param>
+        /// <param name="fileSystem">File system from System.IO.Abstractions</param>
+        /// <returns>Dictionary: 
+        ///     Key is full name of directory from 'sourceDirs';
+        ///     Value is Tuple with amount of copied files (Item1) and amount of failed files (Item2) in the directory</returns>
+        public static Dictionary<string, (int success, int fail)> MakeCopies(
+            List<IDirectoryInfo> sourceDirs, 
+            IDirectoryInfo destDir, 
+            string timeFormat, 
+            IFileSystem fileSystem)
         {
             var failed = new Dictionary<string, (int, int)>();
 
@@ -17,8 +33,8 @@ namespace Copier
                 {
                     if (!sourceDir.Exists) throw new DirectoryNotFoundException();
                     
-                    var newDir = CreateDirectoryWithTimeStamp(destDir, sourceDir.Name, timeFormat);
-                    failed[sourceDir.FullName] = CopyDirectory(sourceDir, newDir);
+                    var newDir = CreateDirectoryWithTimeStamp(destDir, sourceDir.Name, timeFormat, fileSystem);
+                    failed[sourceDir.FullName] = CopyDirectoryContent(sourceDir, newDir, fileSystem);
 
                     Logger.Info($"Copied directory '{sourceDir.FullName}'");
                 }
@@ -30,47 +46,71 @@ namespace Copier
            return failed;
         }
 
-        public static DirectoryInfo CreateDirectoryWithTimeStamp(DirectoryInfo destDir, string dirName, string timeFormat)
+        /// <summary>
+        /// Creates new directory with time stamp
+        /// </summary>
+        /// <param name="destDir">Directory in which new directory will be created</param>
+        /// <param name="dirName">Name of the folder to create</param>
+        /// <param name="timeFormat">String that forms a suffix for directory name using DateTime formatting</param>
+        /// <param name="fileSystem">File system from System.IO.Abstractions</param>
+        /// <returns>New directory in 'destDir' with given 'dirName' and 'timeFormat' suffix</returns>
+        public static IDirectoryInfo CreateDirectoryWithTimeStamp(
+            IDirectoryInfo destDir, 
+            string dirName, 
+            string timeFormat, 
+            IFileSystem fileSystem)
         {
-            string p = Path.Combine(destDir.FullName, $"{dirName}{DateTime.Now.ToString(timeFormat)}");
+            string p = fileSystem.Path.Combine(destDir.FullName,
+                $"{dirName}{DateTime.Now.ToString(timeFormat)}");
             string path = p;
 
             for (int i = 1; i <= 1000; ++i)
             {
-                if (Directory.Exists(p))
+                if (fileSystem.Directory.Exists(p))
                     p = $"{path} ({i})";
                 else
                 {
                     path = p;
+                    p = null;
                     break;
                 }
             }
 
-            if (path == null)
+            if (p != null)
                 throw new DuplicateNameException();
 
-            return Directory.CreateDirectory(path);
+            return fileSystem.Directory.CreateDirectory(path);
         }
 
-        public static (int success, int fail) CopyDirectory(DirectoryInfo sourceDir, DirectoryInfo destDir)
-        {
-            if (!sourceDir.Exists)
-                throw new DirectoryNotFoundException("Source directory does not exist");
+        /// <summary>
+        /// Copies all files and subdirectories of 'sourceDir' to 'destDir'
+        /// </summary>
+        /// <param name="sourceDir">Source directory</param>
+        /// <param name="destDir">Destination directory</param>
+        /// <param name="fileSystem">File system from System.IO.Abstractions</param>
+        /// <returns>Tuple with amount of copied files (Item1) and amount of failed files (Item2)</returns>
+        public static (int success, int fail) CopyDirectoryContent(
+            IDirectoryInfo sourceDir, 
+            IDirectoryInfo destDir, 
+            IFileSystem fileSystem)
+            => CopyRecursively(sourceDir, destDir, (0, 0), fileSystem);
 
-            return CopyRecursively(sourceDir, destDir, (0, 0));
-        }
-
-        private static (int, int) CopyRecursively (DirectoryInfo sourceDir, DirectoryInfo destDir, (int success, int fail) stats) 
+        private static (int, int) CopyRecursively (
+            IDirectoryInfo sourceDir, 
+            IDirectoryInfo destDir, 
+            (int success, int fail) stats, 
+            IFileSystem fileSystem) 
         {
             try
             {
-                Directory.CreateDirectory(destDir.FullName);
-                var dirs = sourceDir.GetDirectories();
+                fileSystem.Directory.CreateDirectory(destDir.FullName);
+                var subDirs = sourceDir.GetDirectories()
+                    .Where(sDir => sDir.FullName != destDir.FullName); //prevent endless copying itself
                 var files = sourceDir.GetFiles();
 
                 foreach (var file in files)
                 {
-                    var tempPath = Path.Combine(destDir.FullName, file.Name);
+                    var tempPath = fileSystem.Path.Combine(destDir.FullName, file.Name);
                     try
                     {
                         file.CopyTo(tempPath, false);
@@ -90,10 +130,12 @@ namespace Copier
                 }
 
                 //recursive directory copy
-                foreach (var subDir in dirs)
-                    stats = CopyRecursively(subDir,
-                        new DirectoryInfo(Path.Combine(destDir.FullName, subDir.Name)),
-                        stats);
+                foreach (var subDir in subDirs)
+                    stats = CopyRecursively(
+                        subDir,
+                        fileSystem.DirectoryInfo.FromDirectoryName(fileSystem.Path.Combine(destDir.FullName, subDir.Name)),
+                        stats,
+                        fileSystem);
             }
             catch (UnauthorizedAccessException) { Logger.Error($"Directory {sourceDir.FullName} is inaccessible"); }
 
