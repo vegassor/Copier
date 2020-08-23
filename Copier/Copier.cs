@@ -104,9 +104,13 @@ namespace Copier
             try
             {
                 fileSystem.Directory.CreateDirectory(destDir.FullName);
-                var subDirs = sourceDir.GetDirectories()
-                    .Where(sDir => sDir.FullName != destDir.FullName); //prevent endless copying itself
-                var files = sourceDir.GetFiles();
+                var subDirs = sourceDir
+                    .GetDirectories()
+                    .Where(sDir => sDir.FullName != destDir.FullName) //prevent endless copying itself
+                    .OrderBy(d => d.FullName.Length);
+                var files = sourceDir
+                    .GetFiles()
+                    .OrderBy(f => f.FullName.Length);
 
                 foreach (var file in files)
                 {

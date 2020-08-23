@@ -66,7 +66,7 @@ namespace Copier
                 if (errors.Count != 0)
                     throw new JsonSerializationException(string.Join("\n", errors));
             }
-            else throw new System.IO.FileNotFoundException();
+            else throw new System.IO.FileNotFoundException($"Config file not found at '{pathToConfFile}'");
 
             Debug.WriteLine($"Raw config:\n{JsonConvert.SerializeObject(Data, Formatting.Indented)}\n");
         }

@@ -69,7 +69,9 @@
     <Error Condition="!Exists('..\packages\ILMerge.3.0.29\build\ILMerge.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\ILMerge.3.0.29\build\ILMerge.props'))" />
   </Target>
   <ItemGroup>
-    <PackageReference Include="ILMerge" Version="3.0.41" />
+    <PackageReference Include="ilmerge">
+      <Version>3.0.41</Version>
+    </PackageReference>
     <PackageReference Include="ILMerge.MSBuild.Task">
       <Version>1.0.7</Version>
     </PackageReference>

@@ -1,0 +1,8 @@
+{
+	"General": {
+		"InputAssemblies": [
+		  "Newtonsoft.Json.dll", 
+		  "System.IO.Abstractions.dll" 
+		]
+	}
+}

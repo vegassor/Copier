@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Abstractions;
 using System.Linq;
+using System.Reflection;
 using System.Security;
 using Newtonsoft.Json;
 
@@ -27,16 +28,17 @@ namespace Copier
                     toDir,
                     "' copy from 'yyyy-MM-dd_HH-mm-ss",
                     fileSystem);
+
                 EndLog(fromDirs, dirsStats);
             }
-            catch (FileNotFoundException)
+            catch (FileNotFoundException e)
             {
-                Logger.Fatal("Config file is not found");
-                Console.WriteLine("Config file is not found");
+                Logger.Fatal(e.Message);
+                Console.WriteLine(e.Message);
             }
             catch (JsonSerializationException e)
             {
-                var msg = $"Config file is not formed correctly:\n{e.Message}";
+                var msg = $"[Fatal] Config file is not formed correctly:\n{e.Message}";
                 Logger.Fatal(msg);
                 Console.WriteLine(msg);
             }
@@ -44,9 +46,8 @@ namespace Copier
             {
                 if (e.Message != nameof(Config.Data.DestinationDirectory)) throw e;
 
-                var msg = "Destination directory is invalid";
-                Logger.Fatal(msg);
-                Console.WriteLine(msg);
+                Logger.Fatal("Destination directory is invalid");
+                Console.WriteLine("[Fatal] Destination directory is invalid");
             }
             catch (UnauthorizedAccessException) { Console.WriteLine("[Fatal] Cannot create log file, try different directory"); }
             catch (Exception e) { Logger.Log(e, e.ToString(), LoggingLevel.Fatal); }
@@ -66,18 +67,10 @@ namespace Copier
 
         public static Config Init(string[] args, IFileSystem fileSystem)
         {
-            var pathToConf = "conf.json";
 
-            if (args.Length > 0)
-            {
-                if (args.Length == 1)
-                    pathToConf = args[0];
-                else
-                {
-                    Console.WriteLine("Usage: [pathToConfigFile]");
-                    Environment.Exit(1);
-                }
-            }
+            var pathToConf = FindConfigPath(args) ?? 
+                throw new FileNotFoundException("The configuration file cannot be found.\n"+
+                "Pass the path to it through command line argument");
 
             var conf = new Config(pathToConf, fileSystem);
             var exceptions = conf.CleanData();
@@ -98,16 +91,51 @@ namespace Copier
                 conf.Data.LoggingDirectory = path;
             }
 
-            Debug.WriteLine($"Cleaned config:\n{JsonConvert.SerializeObject(conf.Data, Formatting.Indented)}\n");
-            Logger.Init(conf.Data.LoggingDirectory, fileSystem, conf.Data.LoggingLevel);
-            Logger.WriteRawToLog($"Log started at {DateTime.Now:yyyy-MM-dd_HH-mm-ss-ffff}\nLogging level: {conf.Data.LoggingLevel}\n");
-            Logger.WriteRawToLog($"Destination directory: {conf.Data.DestinationDirectory}\n");
-
+            StartLog(conf, fileSystem);
+            
             if (exceptions.ContainsKey(nameof(conf.Data.SourceDirectories)))
                 foreach (var dir in exceptions[nameof(conf.Data.SourceDirectories)])
                     Logger.Error($"Source directory {dir.Message}");
 
             return conf;
+        }
+
+        private static string FindConfigPath(string[] args)
+        {
+            if (args.Length > 0)
+            {
+                if (args.Length == 1)
+                    return args[0];
+                else
+                {
+                    Console.WriteLine("Usage: [pathToConfigFile]");
+                    Environment.Exit(1);
+                }
+            }
+            else
+            {
+                if (File.Exists("conf.json"))
+                    return "conf.json";
+
+                var programDataPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    Assembly.GetCallingAssembly().GetName().Name,
+                    "conf.json"
+                    );
+
+                if (File.Exists(programDataPath))
+                    return programDataPath;
+            }
+
+            return null;
+        }
+
+        private static void StartLog(Config conf, IFileSystem fileSystem)
+        {
+            Debug.WriteLine($"Cleaned config:\n{JsonConvert.SerializeObject(conf.Data, Formatting.Indented)}\n");
+            Logger.Init(conf.Data.LoggingDirectory, fileSystem, conf.Data.LoggingLevel);
+            Logger.WriteRawToLog($"Log started at {DateTime.Now:yyyy-MM-dd_HH-mm-ss-ffff}\nLogging level: {conf.Data.LoggingLevel}\n");
+            Logger.WriteRawToLog($"Destination directory: {conf.Data.DestinationDirectory}\n");
         }
 
         public static void EndLog(List<IDirectoryInfo> fromDirs, Dictionary<string, (int success, int fail)> dirsStats)
