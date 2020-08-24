@@ -27,15 +27,15 @@ namespace Copier
 
             if (lvl > LoggingLevel.None)
             {
-                var fileName = $"{Assembly.GetCallingAssembly().GetName().Name}_log_{DateTime.Now:yyyy-MM-dd}.log";
+                var fileName = $"{Assembly.GetCallingAssembly().GetName().Name}_log_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.log";
                 string path;
 
                 if (Config.ValidateDirectory(logDirPath, true, fileSystem) == null)
-                    path = Path.Combine(logDirPath, fileName);
+                    path = fileSystem.Path.Combine(logDirPath, fileName);
                 else
-                    path = Path.Combine(Directory.GetCurrentDirectory(), fileName);
+                    path = fileSystem.Path.Combine(fileSystem.Directory.GetCurrentDirectory(), fileName);
 
-                logFile = File.AppendText(path);
+                logFile = fileSystem.File.AppendText(path);
                 logFile.AutoFlush = true;
                 LogPath = path;
             }

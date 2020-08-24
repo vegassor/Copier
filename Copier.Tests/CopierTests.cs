@@ -43,13 +43,27 @@ namespace Copier.Tests
 
         [Test]
         [Timeout(1000)]
-        public void CopyDirectoryContnet_SourceDirIsDestDir_NoEndlessLoop()
+        public void MakeCopies_SourceDirIsDestDir_NoEndlessLoop()
         {
             var destDir = fileSystem.DirectoryInfo.FromDirectoryName(@"C:\Archive");
             var sourceDirs = new List<IDirectoryInfo> 
                 { fileSystem.DirectoryInfo.FromDirectoryName(@"C:\Archive") };
 
             Assert.DoesNotThrow(() => Copier.MakeCopies(sourceDirs, destDir, "HH-mm-ss", fileSystem));
+        }
+
+        [Test]
+        [Timeout(1000)]
+        public void CopyDirectoryContnet_DestDirIsSubdirOfSourceDir_NoEndlessLoop()
+        {
+            fileSystem.AddFile(@"C:\Archive\1.txt", new MockFileData(new string('0', 1000)));
+            fileSystem.AddFile(@"C:\Archive\1\1.txt", new MockFileData(new string('0', 1000)));
+            fileSystem.AddFile(@"C:\Archive\1\1.txt", new MockFileData(new string('0', 1000)));
+            fileSystem.AddFile(@"C:\Archive\2\1.txt", new MockFileData(new string('0', 1000)));
+            var destDir = fileSystem.DirectoryInfo.FromDirectoryName(@"C:\Archive\dest");
+            var sourceDir = fileSystem.DirectoryInfo.FromDirectoryName(@"C:\Archive");
+
+            Assert.DoesNotThrow(() => Copier.CopyDirectoryContent(sourceDir, destDir, fileSystem));
         }
 
         [Test]

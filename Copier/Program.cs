@@ -53,7 +53,8 @@ namespace Copier
             catch (Exception e) { Logger.Log(e, e.ToString(), LoggingLevel.Fatal); }
             finally
             {
-                Logger.WriteRawToLog($"Log ended at {DateTime.Now:yyyy-MM-dd_HH-mm-ss-ffff}\n\n");
+                Logger.WriteRawToLog($"Log ended at {DateTime.Now:yyyy-MM-dd_HH-mm-ss-ffff}\n");
+                Logger.Init(null, null, LoggingLevel.None);
 
                 #if DEBUG
                 Console.WindowWidth = 200;
@@ -67,16 +68,12 @@ namespace Copier
 
         public static Config Init(string[] args, IFileSystem fileSystem)
         {
-
             var pathToConf = FindConfigPath(args) ?? 
                 throw new FileNotFoundException("The configuration file cannot be found.\n"+
                 "Pass the path to it through command line argument");
 
             var conf = new Config(pathToConf, fileSystem);
             var exceptions = conf.CleanData();
-
-            if (exceptions.ContainsKey(nameof(conf.Data.DestinationDirectory)))
-                throw new SecurityException(nameof(conf.Data.DestinationDirectory));
 
             if (exceptions.ContainsKey(nameof(conf.Data.LoggingDirectory)))
             {
@@ -87,11 +84,14 @@ namespace Copier
                 else if (eType == typeof(DirectoryNotFoundException))
                     Console.WriteLine("Logging directory does not exist");
                 var path = Directory.GetCurrentDirectory();
-                Console.WriteLine($"Log file will be created in current directory - '{path}'");
+                Console.WriteLine($"Log file will be created in '{path}'");
                 conf.Data.LoggingDirectory = path;
             }
 
             StartLog(conf, fileSystem);
+            
+            if (exceptions.ContainsKey(nameof(conf.Data.DestinationDirectory)))
+                throw new SecurityException(nameof(conf.Data.DestinationDirectory));
             
             if (exceptions.ContainsKey(nameof(conf.Data.SourceDirectories)))
                 foreach (var dir in exceptions[nameof(conf.Data.SourceDirectories)])
@@ -148,7 +148,6 @@ namespace Copier
                     (int success, int fail) = dirsStats[dir.FullName];
                     Logger.WriteRawToLog($"'{dir.FullName}': failed - {fail}, copied - {success} files\n");
                 }
-
         }
     }
 }

@@ -99,14 +99,14 @@ namespace Copier
             IDirectoryInfo sourceDir, 
             IDirectoryInfo destDir, 
             (int success, int fail) stats, 
-            IFileSystem fileSystem) 
+            IFileSystem fileSystem)
         {
             try
             {
                 fileSystem.Directory.CreateDirectory(destDir.FullName);
                 var subDirs = sourceDir
                     .GetDirectories()
-                    .Where(sDir => sDir.FullName != destDir.FullName) //prevent endless copying itself
+                    .Where(sDir => !destDir.FullName.Contains(sDir.FullName)) //prevent endless copying itself
                     .OrderBy(d => d.FullName.Length);
                 var files = sourceDir
                     .GetFiles()
